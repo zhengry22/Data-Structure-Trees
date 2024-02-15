@@ -5,6 +5,12 @@
 
 //#define MYDEBUG
 
+#define TIME_EXPENSE_ESTIMATE 1
+
+#ifdef TIME_EXPENSE_ESTIMATE
+#include <chrono>
+#endif
+
 #ifdef MYDEBUG
 #include<queue>
 #include<string>
@@ -26,7 +32,7 @@ public:
     Node* left_child = nullptr;
     Node* right_child = nullptr;
     Node* parent = nullptr;
-    Node(T key, Node* parent = nullptr, Node* left_child = nullptr, Node* right_child = nullptr):
+    Node(T key, Node* parent = nullptr, Node* left_child = nullptr, Node* right_child = nullptr) :
         key(key), parent(parent), left_child(left_child), right_child(right_child) {}
     ~Node() {}
 };
@@ -59,7 +65,7 @@ public:
                 h = depth;
             }
 
-            cout << "(" << tmp.key << ", " << ((tmp.left_child == nullptr) ? "^" : "#") << ((tmp.right_child == nullptr) ? "^" : "#") << ") ";
+            cout << "(" << tmp.key << " h: " << tmp.height << " , " << ((tmp.left_child == nullptr) ? "^" : "#") << ((tmp.right_child == nullptr) ? "^" : "#") << ") ";
             if (tmp.left_child != nullptr) {
                 myqueue.push(*tmp.left_child);
             }
@@ -250,16 +256,17 @@ class AVL : public BST<T> {
 protected:
 
 public:
-    int Balfac(const Node<T>*& x) {
-        return getHeight(x->left_child) - getHeight(x->right_child);
+    int Balfac(const Node<T>* x) {
+        return this->getHeight(x->left_child) - this->getHeight(x->right_child);
     }
 
-    bool AvlBalanced(const Node<T>*& x) {
-        return -2 < Balfac(x) < 2;
+    bool AvlBalanced(const Node<T>* x) {
+        int balfac = Balfac(x);
+        return (-2 < balfac) && (balfac < 2);
     }
 
     Node<T>*& tallerChild(Node<T>* g) {
-        return getHeight(g->left_child) > getHeight(g->right_child) ? g->left_child : g->right_child;
+        return this->getHeight(g->left_child) > this->getHeight(g->right_child) ? g->left_child : g->right_child;
     }
 
     Node<T>* connect34(Node<T>* a, Node<T>* b, Node<T>* c, Node<T>* T0, Node<T>* T1, Node<T>* T2, Node<T>* T3) {
@@ -267,63 +274,110 @@ public:
         a->right_child = T1; if (T1 != nullptr) T1->parent = a;
         c->left_child = T2; if (T2 != nullptr) T2->parent = c;
         c->right_child = T3; if (T3 != nullptr) T3->parent = c;
-        b->left_child = a; a->parent = b; 
+        b->left_child = a; a->parent = b;
         b->right_child = c; c->parent = b;
         this->updateNodeHeight(a);
-        this->updateNodeHeight(c); 
-        this->updateNodeHeight(b); 
+        this->updateNodeHeight(c);
+        this->updateNodeHeight(b);
         return b;
     }
 
-    Node<T>* rotateAt(Node *v) {
-        Node<T>* p = v->parent, g = p->parent;
-        if ( IsLChild(p) ) //zig
-        if ( IsLChild(v) ) { //zig-zig
-            p->parent = g->parent;
-            return connect34( v, p, g, v->left_child, v->right_child, p->right_child, g->right_child );
-        }
-        else { //zig-zag
-            v->parent = g->parent;
-            return connect34( p, v, g, p->left_child, v->left_child, v->right_child, g->right_child );
-        }
-        else //zag
-            if ( IsRChild(v) ) { //zag-zag
+    Node<T>* rotateAt(Node<T>* v) {
+        Node<T>* p = v->parent, *g = p->parent;
+        if (this->isLChild(p)) //zig
+            if (this->isLChild(v)) { //zig-zig
                 p->parent = g->parent;
-                return connect34( g, p, v, g->left_child, p->left_child, v->left_child, v->right_child);
+                return connect34(v, p, g, v->left_child, v->right_child, p->right_child, g->right_child);
+            }
+            else { //zig-zag
+                v->parent = g->parent;
+                return connect34(p, v, g, p->left_child, v->left_child, v->right_child, g->right_child);
+            }
+        else //zag
+            if (this->isRChild(v)) { //zag-zag
+                p->parent = g->parent;
+                return connect34(g, p, v, g->left_child, p->left_child, v->left_child, v->right_child);
             }
             else {
                 v->parent = g->parent;
-                return connect34( g, v, p, g->left_child, v->left_child, v->right_child, p->right_child );
+                return connect34(g, v, p, g->left_child, v->left_child, v->right_child, p->right_child);
             }
     }
 
     // We need to re-implement insert and remove
     Node<T>* insert(const T& e) {
-        Node<T>*& x = search(e);
+        Node<T>*& x = this->search(e);
         if (x != nullptr) return x;
         Node<T>* xx = x = new Node<T>(e, this->_hot); // Create new node
         // Handle the situations where mis-balance may happen
         for (Node<T>* g = this->_hot; g; g = g->parent) {
             if (!AvlBalanced(g)) {
-                if (isLChild(g)) {
-                    g->parent->left_child = rotateAt(tallerChild(tallerChild(g))); // rotateAt v returns 
+                // There might be a possibility that g is already the root
+                if (g->parent == nullptr) {
+                    Node<T>* rt = rotateAt(tallerChild(tallerChild(g))); // Rotate may change the topological structure of the tree
+                    rt->parent = nullptr;
+                    this->root = rt;
                 }
                 else {
-                    g->parent->right_child = rotateAt(tallerChild(tallerChild(g))); // rotateAt v returns 
+                    bool isLeft = this->isLChild(g);
+                    Node<T>* prt = g->parent;
+                    Node<T>* rt = rotateAt(tallerChild(tallerChild(g)));
+                    rt->parent = prt;
+                    // Can't determine left chlid 
+                    if (isLeft) {                       
+                        prt->left_child = rt; // rotateAt v returns 
+                    }
+                    else {       
+                        prt->right_child = rt; // rotateAt v returns 
+                    }
                 }
             }
             else {
-                updateNodeHeight(g);
+                this->updateNodeHeight(g);
             }
         }
         return xx;
     }
-    // First test insert 
+    
+    bool remove(const T& e) {
+        Node<T>*& x = this->search(e);
+        if (x == nullptr) return false;
+        this->removeAt(x, this->_hot);
+        for (Node<T>* g = this->_hot; g; g = g->parent) {
+            if (!AvlBalanced(g)) {
+                // May rotate all the way to the top
+                if (g->parent == nullptr) {
+                    Node<T>* rt = rotateAt(tallerChild(tallerChild(g))); // Rotate may change the topological structure of the tree
+                    rt->parent = nullptr;
+                    this->root = rt;
+                }
+                else {
+                    bool isLeft = this->isLChild(g);
+                    Node<T>* prt = g->parent;
+                    Node<T>* rt = rotateAt(tallerChild(tallerChild(g)));
+                    rt->parent = prt;
+                    // Can't determine left chlid 
+                    if (isLeft) {
+                        prt->left_child = rt; // rotateAt v returns 
+                    }
+                    else {
+                        prt->right_child = rt; // rotateAt v returns 
+                    }
+                    g = rt; // to implement g = g->parent, we need to make g the new child of prt
+                }
+            }
+            this->updateNodeHeight(g);
+        }
+        return true;
+    }
 };
 
 AVL<int> my_tree;
 
 int main() {
+#ifdef TIME_EXPENSE_ESTIMATE
+	auto start_time = chrono::high_resolution_clock::now();
+#endif
     int n;
     cin >> n;
     char sign;
@@ -358,5 +412,10 @@ int main() {
         }
 
     }
+#ifdef TIME_EXPENSE_ESTIMATE
+	auto end_time = chrono::high_resolution_clock::now();
+	auto duration = chrono::duration_cast<chrono::microseconds>(end_time - start_time);
+	cout << "Program Exeute Time: " << duration.count() << " us" << endl;
+#endif
     return 0;
 }
